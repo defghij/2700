@@ -1,3 +1,4 @@
+#include <complex.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdatomic.h>
@@ -21,6 +22,16 @@ static int total_experiments = 100;
 static bool do_complex_mode = true;
 static bool do_simple_mode = true;
 
+
+// This is here to be changed! By default (0) it will use a non-threadsafe
+// type for the shared state variable 'shared_data' Changing it to
+// non-zero will make the shared state variable use a threadsafe
+// type ('atomic_int'). This will affect the results of the experiments!
+// Settings:
+//   USE_ATOMIC := 0 --> static int shared_data = 0;
+//   USE_ATOMIC := 1 --> static atomic_int shared_data = 0;
+#define USE_ATOMICS 0         
+
 // Declare the number of threads. It is set to 8 here. However,
 // feel free to change this to 2 or whatever. If you do, you'll
 // notice that the probability of incorrect results of decreases. 
@@ -34,7 +45,11 @@ static atomic_int thread_count = 8;
 // by every thread. The type, 'int', provides no consistency
 // or coherence guarentees when accessed concurrently by
 // multiple writers/readers.
-static int shared_data = 0;
+#if !USE_ATOMICS 
+  static int shared_data = 0;
+#else
+  static atomic_int shared_data = 0;
+#endif
 
 
 // Thread Synchronization -----------------------------------------
