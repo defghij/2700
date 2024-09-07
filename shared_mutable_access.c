@@ -44,13 +44,13 @@ void simple_mode();
 // Caution: program run-time is proporional to the magnitude of these
 // values due to atomic contention. That is... bigger values mean 
 // longer run-times. These settings seem like a good trade off.
-static int max_threads = 10;
-static int total_experiments = 100;
+#define MAX_THREADS  10
+#define TOTAL_EXPERIMENTS 100
 
-// Complex mode will do a 'total_experiments' on 1..'max_threads'
+// Complex mode will do a 'TOTAL_EXPERIMENTS' on 1..'MAX_THREADS'
 // and output statistical data on the value of 'shared_data'.
-// Simple mode does one experiment over 'max_threads' and report
-// the value of 'max_threads' and 'shared_data'.
+// Simple mode does one experiment over 'MAX_THREADS' and report
+// the value of 'MAX_THREADS' and 'shared_data'.
 static bool do_complex_mode = true;
 static bool do_simple_mode = true;
 
@@ -68,7 +68,7 @@ static bool do_simple_mode = true;
 // feel free to change this to 2 or whatever. If you do, you'll
 // notice that the probability of incorrect results of decreases. 
 // Why is this
-static atomic_int thread_count = 8;        
+static atomic_int thread_count = MAX_THREADS;        
 
 // Expected value is just the number of threads because each 
 // thread will increment the shared state _once and only once_.
@@ -250,11 +250,11 @@ void complex_mode() {
 
   atomic_int original_thread_count = thread_count; // Save off this value so we can reset it later.
 
-  for (thread_count = 1; thread_count <= max_threads; thread_count++) {
+  for (thread_count = 1; thread_count <= MAX_THREADS; thread_count++) {
     int successes = 0;
-    int results[total_experiments];
+    int results[TOTAL_EXPERIMENTS];
 
-    for (int experiment = 0; experiment < total_experiments; experiment++) {
+    for (int experiment = 0; experiment < TOTAL_EXPERIMENTS; experiment++) {
 
       create_threads_and_launch_worker(thread_count);
 
@@ -268,7 +268,7 @@ void complex_mode() {
       shared_data = 0;
     }
 
-    print_stats(thread_count, successes, results, total_experiments);
+    print_stats(thread_count, successes, results, TOTAL_EXPERIMENTS);
   }
 
   thread_count = original_thread_count; // restore thread count incase we want to do simple mode.
@@ -278,7 +278,7 @@ void complex_mode() {
 void print_stats(int thread_count, int successes, int* results, int experiment_count) {
   float average, variance, std_deviation, sum = 0, sum1 = 0;
 
-  int min = max_threads + 1;
+  int min = MAX_THREADS + 1;
   int max = 0;
   for (int i = 0; i < experiment_count; i++) {
     sum = sum + results[i];
@@ -295,8 +295,8 @@ void print_stats(int thread_count, int successes, int* results, int experiment_c
   std_deviation = sqrt(variance);
   printf("| %10d  | %10d  | %8d | %8d | %10.2f | %8d | %10.2f | %10.2f |\n", 
                                       thread_count,
-                                      total_experiments,
-                                      total_experiments - successes,
+                                      TOTAL_EXPERIMENTS,
+                                      TOTAL_EXPERIMENTS - successes,
                                       min,
                                       average,
                                       max,
