@@ -10,15 +10,47 @@ void print_stats(int thread_count, int successes, int* results, int experiment_c
 void complex_mode();
 void simple_mode();
 
+// Purpose of this application ------------------------------------
+//-----------------------------------------------------------------
+
+// The point of this application is to demonstrate that even very
+// simple operations are subject to inconsistent results when 
+// there is shared mutable access to region of memory across many
+// threads. 
+//
+// In this case, we use a 'static int shared_data' and have each
+// thread increment the value. What one would expect to happen when
+// reasoning about applications with in-program order operation is 
+// that the value would be consistent and correct. Or even
+// consistently incorrect (i.e. always 3 instead or 4). Or that
+// given a sufficiently small operation (such as '+= 1') would not
+// be overly susceptable to these effects.
+//
+// Hopefully, this program demonstrates that these assumptions 
+// cannot be relied on. Thanks to modern processors, one thing we
+// can rely on is that we wont get undefined partial values (i.e.
+// 1 + 1 = 0xabcdef01). Instead we're simply likely to omit 
+// operations. That is 1 + 1 <= 2.
+//
+// Ultimately, you can mess with the Configuration and Shared State
+// section and run the application to see the results. If you want
+// additional exposition, you can dive into the remaining
+// comments below.
+
+
 // Configuration and Shared State ---------------------------------
 //-----------------------------------------------------------------
 
 // Caution: program run-time is proporional to the magnitude of these
 // values due to atomic contention. That is... bigger values mean 
-// longer run-times.
+// longer run-times. These settings seem like a good trade off.
 static int max_threads = 10;
 static int total_experiments = 100;
 
+// Complex mode will do a 'total_experiments' on 1..'max_threads'
+// and output statistical data on the value of 'shared_data'.
+// Simple mode does one experiment over 'max_threads' and report
+// the value of 'max_threads' and 'shared_data'.
 static bool do_complex_mode = true;
 static bool do_simple_mode = true;
 
@@ -108,7 +140,7 @@ void* worker(void* _ignored) {
   shared_data += 1;
   return NULL;
 /*
- * The assembly for the function 'worker':
+ * The assembly for the function 'worker' (with '#define USE_ATOMICS 0') is as follows:
  *  1221:       e8 83 ff ff ff          call   11a9 <barrier>
  *  1226:       8b 05 ec 2d 00 00       mov    eax,DWORD PTR [rip+0x2dec]  # 4018 <shared_data>
  *  122c:       83 c0 01                add    eax,0x1
@@ -179,10 +211,7 @@ int main(int argc, char** argv) {
   if (do_simple_mode)  { simple_mode();  }
 }
 
-
-void simple_mode() {
-  printf("\n");
-  printf("Simple Mode--------------------------\n");
+void create_threads_and_launch_worker(int thread_count) {
   pthread_t threads[thread_count];
 
   // Here we loop through the threads we want and register a function that will
@@ -198,7 +227,14 @@ void simple_mode() {
   for(int t = 0; t < thread_count; t++) {
     pthread_join(threads[t], NULL);
   }
+}
 
+
+void simple_mode() {
+  printf("\n");
+  printf("Simple Mode--------------------------\n");
+
+  create_threads_and_launch_worker(thread_count);
   printf("thread_count = %d = %d = shared_data\n", thread_count, shared_data); 
 
   // Reset global variables for next experiment
@@ -210,28 +246,17 @@ void simple_mode() {
 void complex_mode() {
   printf("\n");
   printf("Complex Mode--------------------------\n");
-  printf("|Thread_Count | Experiments | Failures |   Average  |   Variance |   Std Dev  | \n");
+  printf("|Thread_Count | Experiments | Failures |      Min |    Average |      Max |   Variance |   Std Dev  | \n");
+
+  atomic_int original_thread_count = thread_count; // Save off this value so we can reset it later.
 
   for (thread_count = 1; thread_count <= max_threads; thread_count++) {
     int successes = 0;
     int results[total_experiments];
 
     for (int experiment = 0; experiment < total_experiments; experiment++) {
-      pthread_t threads[thread_count];
 
-      // Here we loop through the threads we want and register a function that will
-      // be executed at the start of the thread. That is, we are specifying that we
-      // want THREAD_COUNT threads where they all _only_ execute the function 'worker'.
-      for(int t = 0; t < thread_count; t++) {
-        pthread_create(&threads[t], NULL, worker, NULL);
-      }
-
-      // This is where we actually spawn the threads we requested. Note that we have
-      // to do this sequentially (a for loop). This means that if we didnt use a 'barrier'
-      // then thread 0 could have finished before thread N even gets spawned!
-      for(int t = 0; t < thread_count; t++) {
-        pthread_join(threads[t], NULL);
-      }
+      create_threads_and_launch_worker(thread_count);
 
       // Record the final result was consistent/coherent.
       if (shared_data == thread_count) { successes += 1; }
@@ -245,14 +270,20 @@ void complex_mode() {
 
     print_stats(thread_count, successes, results, total_experiments);
   }
+
+  thread_count = original_thread_count; // restore thread count incase we want to do simple mode.
 }
 
 
 void print_stats(int thread_count, int successes, int* results, int experiment_count) {
   float average, variance, std_deviation, sum = 0, sum1 = 0;
 
+  int min = max_threads + 1;
+  int max = 0;
   for (int i = 0; i < experiment_count; i++) {
     sum = sum + results[i];
+    if (results[i] > max) { max = results[i]; }
+    if (results[i] < min) { min = results[i]; }
   }
   average = sum / (float) experiment_count;
 
@@ -262,10 +293,13 @@ void print_stats(int thread_count, int successes, int* results, int experiment_c
 
   variance = sum1 / (float) experiment_count;
   std_deviation = sqrt(variance);
-  printf("| %10d  | %10d  | %8d | %10.2f | %10.2f | %10.2f |\n", thread_count,
+  printf("| %10d  | %10d  | %8d | %8d | %10.2f | %8d | %10.2f | %10.2f |\n", 
+                                      thread_count,
                                       total_experiments,
                                       total_experiments - successes,
+                                      min,
                                       average,
+                                      max,
                                       variance,
                                       std_deviation);
 }
