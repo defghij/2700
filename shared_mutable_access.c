@@ -6,7 +6,7 @@
 #include <pthread.h>
 #include <math.h>
 
-void print_stats(int thread_count, int successes, int* results, int experiment_count);
+void print_stats(int successes, int* results, int experiment_count);
 void complex_mode();
 void simple_mode();
 
@@ -268,14 +268,14 @@ void complex_mode() {
       shared_data = 0;
     }
 
-    print_stats(thread_count, successes, results, TOTAL_EXPERIMENTS);
+    print_stats(successes, results, TOTAL_EXPERIMENTS);
   }
 
   thread_count = original_thread_count; // restore thread count incase we want to do simple mode.
 }
 
 
-void print_stats(int thread_count, int successes, int* results, int experiment_count) {
+void print_stats(int successes, int* results, int experiment_count) {
   float average, variance, std_deviation, sum = 0, sum1 = 0;
 
   int min = MAX_THREADS + 1;
